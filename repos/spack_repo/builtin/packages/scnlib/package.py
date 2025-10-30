@@ -17,6 +17,9 @@ class Scnlib(CMakePackage):
 
     license("Apache-2.0", checked_by="pranav-sivaraman")
 
+    version("4.0.1", sha256="ece17b26840894cc57a7127138fe4540929adcb297524dec02c490c233ff46a7")
+    version("4.0.0", sha256="f4d7919783b2ae446418b2887b347f436d4fc11101ec5bc88bd9b6d0d95b4485")
+    version("3.0.2", sha256="27f17420ddad6971339e6d5db0d915204181c31f5cb0e92a63b9998d98e2852b")
     version("3.0.1", sha256="bc8a668873601d00cce6841c2d0f2c93f836f63f0fbc77997834dea12e951eb1")
 
     variant("shared", default=True, description="Build shared libs")
@@ -44,6 +47,12 @@ class Scnlib(CMakePackage):
 
     depends_on("googletest cxxstd=17", type="test")
     depends_on("python@3:", type="test")
+
+    patch(
+        "https://github.com/eliaskosunen/scnlib/pull/136.patch",
+        sha256="e29974cb78588c81692792b3502a6cf1df45645f7c7a5adbba36836cba23f3af",
+        when="@4 ^fast-float@7:",
+    )
 
     def cmake_args(self):
         args = [

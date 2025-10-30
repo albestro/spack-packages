@@ -60,11 +60,8 @@ class Paraview(CMakePackage, CudaPackage, ROCmPackage):
     license("Apache-2.0")
 
     version("master", branch="master", submodules=True)
-    version(
-        "5.13.3",
-        sha256="3bd31bb56e07aa2af2a379895745bbc430c565518a363d935f2efc35b076df09",
-        preferred=True,
-    )
+    version("6.0.1", sha256="5e56ac7af5e925b3cfd3fab82470933cbabc7e8fda87e14af64f995d6064eb06")
+    version("5.13.3", sha256="3bd31bb56e07aa2af2a379895745bbc430c565518a363d935f2efc35b076df09")
     version("5.13.2", sha256="4e116250f8e1a9c480f97c5696c9cd72b4d4998b039ca46da8b224f27445f13e")
     version("5.13.1", sha256="a16503ce37b999c2967d84234596e7bf67ac98221851a288bb1399c7e1dc2004")
     version("5.13.0", sha256="886f530bebd6b24c6a7f8a5f4b1afa72c53d4737ccaa4b5fd5946b4e5a758c91")
@@ -93,6 +90,42 @@ class Paraview(CMakePackage, CudaPackage, ROCmPackage):
     version("5.0.1", sha256="caddec83ec284162a2cbc46877b0e5a9d2cca59fb4ab0ea35b0948d2492950bb")
     version("4.4.0", sha256="c2dc334a89df24ce5233b81b74740fc9f10bc181cd604109fd13f6ad2381fc73")
 
+    variant("wip", default=True, description="WIP cleanup", when="@6:")
+
+    with when("~wip"):
+        # maybe still valid
+        variant("raytracing", default=False, description="Enable Raytracing support")
+        variant("catalyst", default=False, description="Enable Catalyst 1", when="@5.7:5.8")
+        variant("fides", default=False, description="Enable Fides support", when="@5.9:")
+
+        # discarded
+        variant("tbb", default=False, description="Enable multi-threaded parallelism with TBB")
+        variant(
+            "advanced_debug",
+            default=False,
+            description="Enable all other debug flags beside build_type, such as VTK_DEBUG_LEAK",
+        )
+        variant(
+            "use_vtkm",
+            default="default",
+            multi=False,
+            values=("default", "on", "off"),
+            description="Build VTK-m with ParaView by setting PARAVIEW_USE_VTKM=ON,OFF."
+            ' "default" lets the build_edition make the decision.'
+            ' "on" or "off" will always override the build_edition.',
+        )
+        variant("hdf5", default=False, description="Use external HDF5")
+        variant("adios2", default=False, description="Enable ADIOS2 support", when="@5.8:")
+
+    with when("+wip"):
+        pass
+
+    variant(
+        "libcatalyst",
+        default=False,
+        description="Enable Catalyst 2 (libcatalyst) implementation",
+        when="@5.9:",
+    )
     variant(
         "development_files",
         default=True,
@@ -104,36 +137,18 @@ class Paraview(CMakePackage, CudaPackage, ROCmPackage):
     variant("qt", default=False, description="Enable Qt (gui) support")
     variant("opengl2", default=True, description="Enable OpenGL2 backend")
     variant("examples", default=False, description="Build examples")
-    variant("hdf5", default=False, description="Use external HDF5")
     variant("shared", default=True, description="Builds a shared version of the library")
     variant("kits", default=True, description="Use module kits")
     variant("pagosa", default=False, description="Build the pagosa adaptor")
     variant("eyedomelighting", default=False, description="Enable Eye Dome Lighting feature")
     variant("nvindex", default=False, description="Enable the pvNVIDIAIndeX plugin")
-    variant("tbb", default=False, description="Enable multi-threaded parallelism with TBB")
-    variant("adios2", default=False, description="Enable ADIOS2 support", when="@5.8:")
-    variant("fides", default=False, description="Enable Fides support", when="@5.9:")
     variant("visitbridge", default=False, description="Enable VisItBridge support")
-    variant("raytracing", default=False, description="Enable Raytracing support")
     variant("cdi", default=False, description="Enable CDI support")
     variant(
         "openpmd",
         default=False,
         description="Enable openPMD support (w/ ADIOS2/HDF5)",
         when="@5.9: +python",
-    )
-    variant("catalyst", default=False, description="Enable Catalyst 1", when="@5.7:")
-    variant(
-        "libcatalyst",
-        default=False,
-        description="Enable Catalyst 2 (libcatalyst) implementation",
-        when="@5.10:",
-    )
-
-    variant(
-        "advanced_debug",
-        default=False,
-        description="Enable all other debug flags beside build_type, such as VTK_DEBUG_LEAK",
     )
     variant(
         "build_edition",
@@ -143,16 +158,6 @@ class Paraview(CMakePackage, CudaPackage, ROCmPackage):
         description="Build editions include only certain modules. "
         "Editions are listed in decreasing order of size.",
     )
-    variant(
-        "use_vtkm",
-        default="default",
-        multi=False,
-        values=("default", "on", "off"),
-        description="Build VTK-m with ParaView by setting PARAVIEW_USE_VTKM=ON,OFF."
-        ' "default" lets the build_edition make the decision.'
-        ' "on" or "off" will always override the build_edition.',
-    )
-
     conflicts("~hdf5", when="+visitbridge")
     conflicts("+adios2", when="@:5.10 ~mpi")
     conflicts("+fides", when="~adios2", msg="Fides needs ADIOS2")
@@ -299,10 +304,11 @@ class Paraview(CMakePackage, CudaPackage, ROCmPackage):
     # protobuf requires newer abseil-cpp, which in turn requires C++14,
     # but paraview uses C++11 by default. Use for 5.8+ until ParaView updates
     # its C++ standard level.
-    depends_on("protobuf@3.4:3.21", when="@5.8:%gcc")
-    depends_on("protobuf@3.4:3.21", when="@5.8:%clang")
-    depends_on("protobuf@3.4:3.21", when="@5.11:")
-    depends_on("protobuf@3.4:3.21", when="@master")
+    with when("~wip"):
+        depends_on("protobuf@3.4:3.21", when="@5.8:%gcc")
+        depends_on("protobuf@3.4:3.21", when="@5.8:%clang")
+        depends_on("protobuf@3.4:3.21", when="@5.11:")
+        depends_on("protobuf@3.4:3.21", when="@master")
     depends_on("libxml2")
     depends_on("lz4")
     depends_on("xz")
@@ -326,7 +332,7 @@ class Paraview(CMakePackage, CudaPackage, ROCmPackage):
 
     # ParaView depends on cli11 due to changes in MR
     # https://gitlab.kitware.com/paraview/paraview/-/merge_requests/4951
-    depends_on("cli11@1.9.1", when="@5.10:")
+    depends_on("cli11@1.9.1", when="@5.10: ~wip")
 
     # ParaView depends on nlohmann-json due to changes in MR
     # https://gitlab.kitware.com/vtk/vtk/-/merge_requests/8550
@@ -335,10 +341,19 @@ class Paraview(CMakePackage, CudaPackage, ROCmPackage):
     # ParaView depends on proj@8.1.0 due to changes in MR
     # v8.1.0 is required for VTK::GeoVis
     # https://gitlab.kitware.com/vtk/vtk/-/merge_requests/8474
-    depends_on("proj@8.1.0", when="@5.11:")
+    depends_on("proj@8.1.0", when="@5.11: ~wip")
 
     # Patches to vendored VTK-m are needed for forward compat with CUDA 12 (mr 2972 and 3259)
-    depends_on("cuda@:11", when="+cuda")
+    depends_on("cuda@:11", when="+cuda ~wip")
+
+    # WIP
+    with when("@6:"):
+        # TODO this has to be cleaned up
+        depends_on(
+            "vtk raytracing=ospray +tbb io=cgns,exodusii,netcdf,xdmf,adios2,ioss,fides,conduit"
+        )
+        depends_on("vtk +mpi", when="+mpi")
+        depends_on("vtk +python", when="+python")
 
     patch("stl-reader-pv440.patch", when="@4.4.0")
 
@@ -529,11 +544,11 @@ class Paraview(CMakePackage, CudaPackage, ROCmPackage):
         includes = variant_bool("+development_files")
 
         cmake_args = [
-            "-DVTK_OPENGL_HAS_OSMESA:BOOL=%s" % variant_bool("^[virtuals=gl] osmesa"),
-            "-DVTK_USE_X:BOOL=%s" % use_x11(),
+            # "-DVTK_OPENGL_HAS_OSMESA:BOOL=%s" % variant_bool("^[virtuals=gl] osmesa"),
+            # "-DVTK_USE_X:BOOL=%s" % use_x11(),
             "-DPARAVIEW_INSTALL_DEVELOPMENT_FILES:BOOL=%s" % includes,
             "-DBUILD_TESTING:BOOL=OFF",
-            "-DOpenGL_GL_PREFERENCE:STRING=LEGACY",
+            # "-DOpenGL_GL_PREFERENCE:STRING=LEGACY",
             self.define_from_variant("PARAVIEW_ENABLE_VISITBRIDGE", "visitbridge"),
             self.define_from_variant("VISIT_BUILD_READER_Silo", "visitbridge"),
         ]
@@ -541,22 +556,31 @@ class Paraview(CMakePackage, CudaPackage, ROCmPackage):
         if spec.satisfies("^[virtuals=gl] egl"):
             cmake_args.append("-DVTK_OPENGL_HAS_EGL:BOOL=ON")
 
-        if spec.satisfies("@5.12:"):
-            cmake_args.append("-DVTK_MODULE_USE_EXTERNAL_VTK_fast_float:BOOL=OFF")
-            cmake_args.append("-DVTK_MODULE_USE_EXTERNAL_VTK_token:BOOL=OFF")
+        # WIP
+        if spec.satisfies("+wip"):
+            cmake_args.append(self.define("PARAVIEW_BUILD_WITH_EXTERNAL", True))
+            cmake_args.append(self.define("PARAVIEW_USE_EXTERNAL_VTK", True))
+            cmake_args.append(self.define("PARAVIEW_ENABLE_WEB", False))
 
-        if spec.satisfies("@5.11:"):
-            cmake_args.append("-DVTK_MODULE_USE_EXTERNAL_VTK_verdict:BOOL=OFF")
+        if spec.satisfies("+wip"):
+            pass
+        else:
+            if spec.satisfies("@5.12:"):
+                cmake_args.append("-DVTK_MODULE_USE_EXTERNAL_VTK_fast_float:BOOL=OFF")
+                cmake_args.append("-DVTK_MODULE_USE_EXTERNAL_VTK_token:BOOL=OFF")
 
-        if spec.satisfies("@5.10:"):
-            cmake_args.extend(
-                [
-                    "-DVTK_MODULE_USE_EXTERNAL_ParaView_vtkcatalyst:BOOL=OFF",
-                    "-DVTK_MODULE_USE_EXTERNAL_VTK_ioss:BOOL=OFF",
-                    "-DVTK_MODULE_USE_EXTERNAL_VTK_exprtk:BOOL=OFF",
-                    "-DVTK_MODULE_USE_EXTERNAL_VTK_fmt:BOOL=OFF",
-                ]
-            )
+            if spec.satisfies("@5.11:"):
+                cmake_args.append("-DVTK_MODULE_USE_EXTERNAL_VTK_verdict:BOOL=OFF")
+
+            if spec.satisfies("@5.10:"):
+                cmake_args.extend(
+                    [
+                        "-DVTK_MODULE_USE_EXTERNAL_ParaView_vtkcatalyst:BOOL=OFF",
+                        "-DVTK_MODULE_USE_EXTERNAL_VTK_ioss:BOOL=OFF",
+                        "-DVTK_MODULE_USE_EXTERNAL_VTK_exprtk:BOOL=OFF",
+                        "-DVTK_MODULE_USE_EXTERNAL_VTK_fmt:BOOL=OFF",
+                    ]
+                )
 
         if spec.satisfies("@:5.7") and spec["cmake"].satisfies("@3.17:"):
             cmake_args.append("-DFPHSA_NAME_MISMATCHED:BOOL=ON")
@@ -610,16 +634,23 @@ class Paraview(CMakePackage, CudaPackage, ROCmPackage):
                 ]
             )
 
-        if "+adios2" in spec:
-            cmake_args.extend(["-DPARAVIEW_ENABLE_ADIOS2:BOOL=ON"])
+        if "^vtk io=adios2" in spec or "+adios2" in spec:
+            cmake_args.append(self.define("PARAVIEW_ENABLE_ADIOS2:BOOL", True))
 
-        if "+fides" in spec:
-            cmake_args.append("-DPARAVIEW_ENABLE_FIDES:BOOL=ON")
+        if "^vtk io=fides" in spec or "+fides" in spec:
+            cmake_args.append(self.define("PARAVIEW_ENABLE_FIDES", True))
+
+        if "^vtk io=cgns" in spec or "+fides" in spec:
+            cmake_args.append(self.define("PARAVIEW_ENABLE_CGNS_READER", True))
+            cmake_args.append(self.define("PARAVIEW_ENABLE_CGNS_WRITER", True))
+
+        if "^vtk" in spec:  # TODO
+            cmake_args.append(self.define("PARAVIEW_USE_VISKORES", True))
 
         # The assumed qt version changed to QT5 (as of paraview 5.2.1),
         # so explicitly specify which QT major version is actually being used
-        if spec.satisfies("+qt"):
-            cmake_args.extend(["-DPARAVIEW_QT_VERSION=%s" % spec["qt"].version[0]])
+        if "+qt" in spec:
+            cmake_args.append("-DPARAVIEW_QT_VERSION=%s" % spec["qt"].version[0])
             if IS_WINDOWS:
                 # Windows does not currently support Qt Quick
                 cmake_args.append("-DVTK_MODULE_ENABLE_VTK_GUISupportQtQuick:STRING=NO")
@@ -661,7 +692,7 @@ class Paraview(CMakePackage, CudaPackage, ROCmPackage):
         cmake_args.append("-DPARAVIEW_BUILD_SHARED_LIBS:BOOL=%s" % variant_bool("+shared"))
 
         # VTK-m added to ParaView in 5.3.0 and up
-        if spec.satisfies("@5.3.0:") and spec.variants["use_vtkm"].value != "default":
+        if spec.satisfies("@5.3.0:5.99") and spec.variants["use_vtkm"].value != "default":
             cmake_args.append(
                 "-DPARAVIEW_USE_VTKM:BOOL=%s" % spec.variants["use_vtkm"].value.upper()
             )
@@ -757,13 +788,17 @@ class Paraview(CMakePackage, CudaPackage, ROCmPackage):
                 cmake_args.append("-DVTK_MODULE_ENABLE_ParaView_PythonCatalyst=YES")
 
         if "+libcatalyst" in spec:
-            cmake_args.append("-DVTK_MODULE_ENABLE_ParaView_InSitu=YES")
             cmake_args.append("-DPARAVIEW_ENABLE_CATALYST=YES")
+            cmake_args.append("-DVTK_MODULE_ENABLE_ParaView_InSitu=YES")
 
-        cmake_args.append(self.define_from_variant("PARAVIEW_ENABLE_RAYTRACING", "raytracing"))
+        # Raytracing
         # Currently only support OSPRay ray tracing
-        cmake_args.append(self.define_from_variant("VTK_ENABLE_OSPRAY", "raytracing"))
-        cmake_args.append(self.define_from_variant("VTKOSPRAY_ENABLE_DENOISER", "raytracing"))
+        if "^vtk +raytracing" in spec:
+            cmake_args.append(self.define_from_variant("PARAVIEW_ENABLE_RAYTRACING", "raytracing"))
+
+        if spec.satisfies("@:9.4"):
+            cmake_args.append(self.define_from_variant("VTK_ENABLE_OSPRAY", "raytracing"))
+            cmake_args.append(self.define_from_variant("VTKOSPRAY_ENABLE_DENOISER", "raytracing"))
 
         # CDI
         cmake_args.append(self.define_from_variant("PARAVIEW_PLUGIN_ENABLE_CDIReader", "cdi"))

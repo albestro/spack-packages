@@ -7,12 +7,13 @@ import glob
 import os
 
 from spack_repo.builtin.build_systems.cmake import CMakePackage
+from spack_repo.builtin.build_systems.cuda import CudaPackage
 from spack_repo.builtin.packages.boost.package import Boost
 
 from spack.package import *
 
 
-class Vtk(CMakePackage):
+class Vtk(CMakePackage, CudaPackage):
     """The Visualization Toolkit (VTK) is an open-source, freely
     available software system for 3D computer graphics, image
     processing and visualization."""
@@ -25,11 +26,8 @@ class Vtk(CMakePackage):
 
     license("BSD-3-Clause")
 
-    version(
-        "9.5.1",
-        sha256="14443661c7b095d05b4e376fb3f40613f173e34fc9d4658234e9ec1d624a618f",
-        preferred=True,
-    )
+    version("9.5.2", sha256="cee64b98d270ff7302daf1ef13458dff5d5ac1ecb45d47723835f7f7d562c989")
+    version("9.5.1", sha256="14443661c7b095d05b4e376fb3f40613f173e34fc9d4658234e9ec1d624a618f")
     version("9.5.0", sha256="04ae86246b9557c6b61afbc534a6df099244fbc8f3937f82e6bc0570953af87d")
     version("9.4.1", sha256="c253b0c8d002aaf98871c6d0cb76afc4936c301b72358a08d5f3f72ef8bc4529")
     version("9.3.1", sha256="8354ec084ea0d2dc3d23dbe4243823c4bfc270382d0ce8d658939fd50061cab8")
@@ -77,11 +75,12 @@ class Vtk(CMakePackage):
     variant(
         "io",
         values=any_combination_of(
-            "adios2", "cgns", "exodusii", "ffmpeg", "fides", "ioss", "netcdf", "xdmf"
+            "adios2", "cgns", "exodusii", "ffmpeg", "fides", "ioss", "netcdf", "xdmf", "conduit"
         ).with_default("cgns,exodusii,ioss,netcdf"),
         description="Enable IO modules",
     )
     requires("io=adios2", when="io=fides")
+    conflicts("io=conduit", when="~cuda")
 
     variant(
         "raytracing",
@@ -89,6 +88,12 @@ class Vtk(CMakePackage):
         description="Enable raytracing support",
     )
     variant("advanced_debug", default=False, description="Enable the VTK_DEBUG_LEAKS flag")
+
+    # WIP
+    with when("@9.5:"):
+        variant("x11", default=False, description="Enable X11")
+        variant("tbb", default=False, description="Enable TBB")
+        variant("external_viskores", default=False, description="Use external viskores")
 
     patch("gcc.patch", when="@6.1.0")
 
@@ -107,7 +112,7 @@ class Vtk(CMakePackage):
         when="@9.1:9.2",
     )
 
-    # Patch for paraview 5.10: +hdf5 ^hdf5@1.13.2:
+    # Patch for paraview 5.10: +hdf5 ^hdf5@1.13.2
     # https://gitlab.kitware.com/vtk/vtk/-/merge_requests/9690
     # patch seems to effectively been added to vtk@9.2.3 (e81a2fe)
     patch("xdmf2-hdf51.13.2.patch", when="@9:9.2.2 io=xdmf")
@@ -130,7 +135,7 @@ class Vtk(CMakePackage):
         extends("python@:3.9", when="@:9.1")
 
     # We need mpi4py if buidling python wrappers and using MPI
-    depends_on("py-mpi4py", when="+python+mpi", type="run")
+    depends_on("py-mpi4py", when="+python+mpi", type=("build", "run"))
 
     # python3.7 compatibility patch backported from upstream
     # https://gitlab.kitware.com/vtk/vtk/commit/706f1b397df09a27ab8981ab9464547028d0c322
@@ -175,7 +180,7 @@ class Vtk(CMakePackage):
     # with CMake from VTK
     # a patch with the same name is also applied to paraview
     # the two patches are the same but for the path to the files they patch
-    patch("vtk_alias_hdf5.patch", when="@9:")
+    patch("vtk_alias_hdf5.patch", when="@9:9.4")
     # VTK 9.0 on Windows uses dll instead of lib for hdf5-hl target, which fails linking. Can't
     # be fixed by bumping CMake lower bound, because VTK vendors FindHDF5.cmake. Various other
     # patches to FindHDF5.cmake are missing, so add conflict instead of a series of patches.
@@ -197,6 +202,7 @@ class Vtk(CMakePackage):
 
     depends_on("adios2+mpi", when="io=adios2 +mpi")
     depends_on("adios2~mpi", when="io=adios2 ~mpi")
+    depends_on("adios2+libcatalyst", when="io=adios2,conduit")
     depends_on("expat")
     # See <https://gitlab.kitware.com/vtk/vtk/-/issues/18033> for why vtk doesn't
     # work yet with freetype 2.10.3 (including possible patches)
@@ -240,11 +246,11 @@ class Vtk(CMakePackage):
     with when("@9.1: io=ioss"):
         depends_on("seacas+mpi", when="+mpi")
         depends_on("seacas~mpi", when="~mpi")
-        depends_on("seacas@2021-05-12:2022-10-14", when="@9.1")
-        # vtk@9.2: need Ioss::Utils::get_debug_stream() which only 2022-10-14 provides,
-        # and to be safe against other issues, make them build with this version only:
-        depends_on("seacas@2022-10-14", when="@9.2:9.3")
-        depends_on("seacas@2024-06-27", when="@9.4:")
+        # depends_on("seacas@2021-05-12:2022-10-14", when="@9.1")
+        # # vtk@9.2: need Ioss::Utils::get_debug_stream() which only 2022-10-14 provides,
+        # # and to be safe against other issues, make them build with this version only:
+        # depends_on("seacas@2022-10-14", when="@9.2:9.3")
+        # depends_on("seacas@2024-06-27", when="@9.4:")
 
     depends_on("nlohmann-json", when="@9.2:")
 
@@ -290,6 +296,45 @@ class Vtk(CMakePackage):
     # https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=280893
     patch("vtk_clang19_size_t.patch", when="@9.2:9.4.2")
 
+    # WIP
+    with when("@9.5:"):
+        depends_on("fast-float")
+        depends_on("fast-float@7", when="@=9.5.2")  # 7.0.0 limited by cmake
+
+        depends_on("fmt")
+        depends_on("fmt@11", when="@=9.5.2")  # 11.0.0
+        conflicts("fmt@12", when="@:9.5.2")
+
+        depends_on("cli11")
+        depends_on("libharu")
+        depends_on("double-conversion")
+
+        depends_on("pegtl")
+        conflicts("pegtl@3", when="@:9.5.2")  # 2.8.3
+
+        with when("+external_viskores"):
+            depends_on("viskores+64bitids")
+            depends_on("viskores+vtktypes")
+            depends_on("viskores+tbb", when="+tbb")
+            depends_on("viskores+cuda", when="+cuda")  # TODO what about cuda_arch
+            depends_on("viskores~mpi")
+            depends_on("viskores~doubleprecision")
+            depends_on("viskores~rendering")
+
+        # depends_on("scnlib")  # @4.0.1 from 9.5.3:
+
+        # depends_on("exprtk") # problem with custom cmake
+        # depends_on("token") # private repo?
+        depends_on("verdict")
+
+        # conflicts("python@3.13:", when="@:9.5.2")  # pyrepl problem with paraview
+        depends_on("py-matplotlib", when="+python")  # ?
+
+    # hard deps
+    # gl2ps
+    # utf8cpp
+    # python
+
     def patch(self):
         if self.spec.satisfies("@9.2: io=ioss"):
             # provide definition for Ioss::Init::Initializer::Initializer(),
@@ -297,7 +342,7 @@ class Vtk(CMakePackage):
             # but not on Linux, as undefined symbols are tolerated
             filter_file("TARGETS Ioss", "TARGETS Ioss Ionit", "ThirdParty/ioss/CMakeLists.txt")
 
-        if self.spec.satisfies("@9.4: io=ioss"):
+        if self.spec.satisfies("@9.4:9.5.0 io=ioss"):
             # Needed to build VTK with external SEACAS >= 2022-10-14
             filter_file(
                 "^.*USE_VARIABLES SEACASIoss_INCLUDE_DIRS.*$", "", "ThirdParty/ioss/CMakeLists.txt"
@@ -332,11 +377,129 @@ class Vtk(CMakePackage):
             "-DVTK_ALL_NEW_OBJECT_FACTORY:BOOL=ON",
         ]
 
+        if "darwin" in spec.architecture:
+            cmake_args.extend(["-DCMAKE_MACOSX_RPATH=ON"])
+
+        cmake_args.append(self.define_from_variant("VTK_VERSIONED_INSTALL", "versioned_install"))
+
         def module_variant(feature, on="YES", off="NO"):
             """Ternary for spec variant to YES/NO string"""
             if spec.satisfies(feature):
                 return on
             return off
+
+        cmake_args.append(self.define_from_variant("VTK_SMP_ENABLE_TBB", "tbb"))
+        if "+tbb" in spec:
+            cmake_args.append(self.define("VTK_SMP_IMPLEMENTATION_TYPE", "TBB"))
+
+        if "+cuda" in spec:
+            cmake_args.extend(
+                [
+                    self.define_from_variant("VTK_USE_CUDA", "cuda"),
+                    self.define("CMAKE_CUDA_ARCHITECTURES", spec.variants["cuda_arch"].value),
+                    self.define("CMAKE_CUDA_HOST_COMPILER", self.compiler.cxx),
+                ]
+            )
+
+        cmake_args.append(self.define("VTK_GROUP_ENABLE_Imaging", "YES"))
+        cmake_args.append(self.define("VTK_GROUP_ENABLE_Parallel", "YES"))
+        cmake_args.append(self.define("VTK_GROUP_ENABLE_Qt", "NO"))
+        cmake_args.append(self.define("VTK_GROUP_ENABLE_StandAlone", "YES"))
+        cmake_args.append(self.define("VTK_GROUP_ENABLE_Views", "YES"))
+        cmake_args.append(self.define("VTK_GROUP_ENABLE_Web", "NO"))
+        cmake_args.append(self.define("VTK_GROUP_ENABLE_Rendering", "YES"))
+        cmake_args.append(self.define("VTK_ENABLE_REMOTE_MODULES", "NO"))  # not sure about this
+
+        cmake_args.append(self.define("VTK_MODULE_ENABLE_VTK_cli11", "YES"))
+
+        cmake_args.append(self.define("VTK_MODULE_ENABLE_VTK_AcceleratorsVTKmFilters", "YES"))
+        cmake_args.append(self.define("VTK_MODULE_ENABLE_VTK_IOVPIC", "YES"))
+        cmake_args.append(self.define("VTK_MODULE_ENABLE_VTK_IOAvmesh", "YES"))
+        cmake_args.append(self.define("VTK_MODULE_ENABLE_VTK_IOH5part", "YES"))
+        cmake_args.append(self.define("VTK_MODULE_ENABLE_VTK_IOH5Rage", "YES"))
+        cmake_args.append(self.define("VTK_MODULE_ENABLE_VTK_IOOMF", "YES"))
+        cmake_args.append(self.define("VTK_MODULE_ENABLE_VTK_IOParallelExodus", "YES"))
+        cmake_args.append(self.define("VTK_MODULE_ENABLE_VTK_IOParallelLSDyna", "YES"))
+        cmake_args.append(self.define("VTK_MODULE_ENABLE_VTK_IOPIO", "YES"))
+        cmake_args.append(self.define("VTK_MODULE_ENABLE_VTK_IOTRUCHAS", "YES"))
+        cmake_args.append(self.define("VTK_MODULE_ENABLE_VTK_RenderingParallel", "YES"))
+        cmake_args.append(self.define("VTK_MODULE_ENABLE_VTK_RenderingParallelLIC", "YES"))
+        cmake_args.append(self.define("VTK_MODULE_ENABLE_VTK_FiltersParallelDIY2", "YES"))
+        cmake_args.append(self.define("VTK_MODULE_ENABLE_VTK_FiltersParallelFlowPaths", "YES"))
+        cmake_args.append(self.define("VTK_MODULE_ENABLE_VTK_FiltersParallelStatistics", "YES"))
+
+        # EXTERNALS
+        # In general, we disable use of VTK "ThirdParty" libs, preferring
+        # spack-built versions whenever possible but there are exceptions.
+        if spec.satisfies("@master"):
+            cmake_args.append(self.define("VTK_MODULE_USE_EXTERNAL_VTK_scn", True))
+        elif spec.satisfies("@9.5:"):
+            cmake_args.extend(
+                [
+                    self.define("VTK_USE_EXTERNAL", True),
+                    self.define("VTK_MODULE_USE_EXTERNAL_VTK_fast_float", True),
+                    self.define("VTK_MODULE_USE_EXTERNAL_VTK_fmt", True),
+                    self.define("VTK_MODULE_USE_EXTERNAL_VTK_pegtl", True),
+                    self.define("VTK_MODULE_USE_EXTERNAL_VTK_cli11", True),
+                    self.define_from_variant(
+                        "VTK_MODULE_USE_EXTERNAL_VTK_vtkviskores", "external_viskores"
+                    ),
+                    self.define("VTK_MODULE_USE_EXTERNAL_VTK_ioss", True),
+                    self.define("VTK_MODULE_USE_EXTERNAL_VTK_libharu", True),
+                    self.define("VTK_MODULE_USE_EXTERNAL_VTK_doubleconversion", True),
+                    self.define("VTK_MODULE_USE_EXTERNAL_VTK_verdict", True),
+                    self.define("VTK_MODULE_USE_EXTERNAL_VTK_token", False),
+                    self.define("VTK_MODULE_USE_EXTERNAL_VTK_exprtk", False),
+                ]
+            )
+        else:
+            if spec.satisfies("@:8"):
+                cmake_args.extend(
+                    ["-DVTK_USE_SYSTEM_LIBRARIES:BOOL=ON", "-DVTK_USE_SYSTEM_LIBHARU=OFF"]
+                )
+                if spec.satisfies("@:8.0"):
+                    cmake_args.append("-DVTK_USE_SYSTEM_GL2PS=OFF")
+            else:
+                cmake_args.extend(
+                    [
+                        "-DVTK_USE_EXTERNAL:BOOL=ON",
+                        "-DVTK_MODULE_USE_EXTERNAL_VTK_fast_float:BOOL=OFF",
+                        "-DVTK_MODULE_USE_EXTERNAL_VTK_libharu:BOOL=OFF",
+                        "-DVTK_MODULE_USE_EXTERNAL_VTK_pegtl:BOOL=OFF",
+                        "-DVTK_MODULE_USE_EXTERNAL_VTK_token:BOOL=OFF",
+                        f"-DHDF5_ROOT={spec['hdf5'].prefix}",  # TODO why?
+                    ]
+                )
+                if spec.satisfies("@9.1:"):
+                    cmake_args.extend(
+                        [
+                            "-DVTK_MODULE_USE_EXTERNAL_VTK_exprtk:BOOL=OFF",
+                            # uses an unreleased version of fmt
+                            "-DVTK_MODULE_USE_EXTERNAL_VTK_fmt:BOOL=OFF",
+                        ]
+                    )
+                if spec.satisfies("@9.2:"):
+                    cmake_args.append("-DVTK_MODULE_USE_EXTERNAL_VTK_verdict:BOOL=OFF")
+                if spec.satisfies("@9.5:"):
+                    cmake_args.append("-DVTK_MODULE_USE_EXTERNAL_VTK_vtkviskores:BOOL=OFF")
+
+        # Version 8.2.1a using internal libproj/pugixml for compatability
+        if spec.satisfies("@8.2.1a"):
+            cmake_args.append("-DVTK_USE_SYSTEM_LIBPROJ:BOOL=OFF")
+            cmake_args.append("-DVTK_USE_SYSTEM_PUGIXML:BOOL=OFF")
+
+        # Some variable names have changed
+        if spec.satisfies("@8.2.0"):
+            cmake_args.append("-DVTK_USE_SYSTEM_PUGIXML:BOOL=OFF")
+        elif spec.satisfies("@:8.1"):
+            cmake_args.extend(
+                [
+                    "-DVTK_USE_SYSTEM_LIBPROJ4:BOOL=OFF",
+                    f"-DNETCDF_CXX_ROOT={spec['netcdf-cxx'].prefix}",
+                ]
+            )
+
+        # IO
 
         adios2_enabled = module_variant("io=adios2")
         cmake_args.append(self.define("VTK_MODULE_ENABLE_VTK_IOADIOS2", adios2_enabled))
@@ -362,79 +525,54 @@ class Vtk(CMakePackage):
 
         # Needed by netcdf and exodusii io modules
         cmake_args.append(
-            self.define("VTK_MODULE_ENABLE_VTK_netcdf", "YES" if "netcdf-c" in spec else "NO")
+            self.define(
+                "VTK_MODULE_ENABLE_VTK_netcdf", "YES" if "netcdf-c" in spec else "NO"
+            )  # not sure about this
         )
 
-        if spec.satisfies("+mpi"):
-            cmake_args.append(
-                self.define("VTK_MODULE_ENABLE_VTK_IOParallelNetCDF", netcdf_enabled)
-            )
+        if spec.satisfies("io=xdmf"):
+            if spec.satisfies("^cmake@3.12:"):
+                # This policy exists only for CMake >= 3.12
+                cmake_args.extend(["-DCMAKE_POLICY_DEFAULT_CMP0074=NEW"])
 
-        if spec.satisfies("raytracing=ospray"):
-            cmake_args.append(self.define("VTK_MODULE_ENABLE_VTK_RenderingRayTracing", "YES"))
-            cmake_args.append("-DVTK_ENABLE_OSPRAY:BOOL=ON")
-            cmake_args.append("-DVTKOSPRAY_ENABLE_DENOISER:BOOL=ON")
-
-        # Version 8.2.1a using internal libproj/pugixml for compatability
-        if spec.satisfies("@8.2.1a"):
-            cmake_args.append("-DVTK_USE_SYSTEM_LIBPROJ:BOOL=OFF")
-            cmake_args.append("-DVTK_USE_SYSTEM_PUGIXML:BOOL=OFF")
-
-        # Disable wrappers for other languages.
-        cmake_args.append("-DVTK_WRAP_JAVA=OFF")
-        if spec.satisfies("@:8.1"):
-            cmake_args.append("-DVTK_WRAP_TCL=OFF")
-
-        # In general, we disable use of VTK "ThirdParty" libs, preferring
-        # spack-built versions whenever possible but there are exceptions.
-        if spec.satisfies("@:8"):
-            cmake_args.extend(
-                ["-DVTK_USE_SYSTEM_LIBRARIES:BOOL=ON", "-DVTK_USE_SYSTEM_LIBHARU=OFF"]
-            )
-            if spec.satisfies("@:8.0"):
-                cmake_args.append("-DVTK_USE_SYSTEM_GL2PS=OFF")
-        else:
-            cmake_args.extend(
-                [
-                    "-DVTK_USE_EXTERNAL:BOOL=ON",
-                    "-DVTK_MODULE_USE_EXTERNAL_VTK_fast_float:BOOL=OFF",
-                    "-DVTK_MODULE_USE_EXTERNAL_VTK_libharu:BOOL=OFF",
-                    "-DVTK_MODULE_USE_EXTERNAL_VTK_pegtl:BOOL=OFF",
-                    "-DVTK_MODULE_USE_EXTERNAL_VTK_token:BOOL=OFF",
-                    f"-DHDF5_ROOT={spec['hdf5'].prefix}",
-                ]
-            )
-            if spec.satisfies("@9.1:"):
+            if spec.satisfies("@:8"):
                 cmake_args.extend(
                     [
-                        "-DVTK_MODULE_USE_EXTERNAL_VTK_exprtk:BOOL=OFF",
-                        # uses an unreleased version of fmt
-                        "-DVTK_MODULE_USE_EXTERNAL_VTK_fmt:BOOL=OFF",
+                        # Enable XDMF Support here
+                        "-DModule_vtkIOXdmf2:BOOL=ON",
+                        "-DModule_vtkIOXdmf3:BOOL=ON",
+                        f"-DBOOST_ROOT={spec['boost'].prefix}",
+                        f"-DBOOST_LIBRARY_DIR={spec['boost'].prefix.lib}",
+                        f"-DBOOST_INCLUDE_DIR={spec['boost'].prefix.include}",
+                        "-DBOOST_NO_SYSTEM_PATHS:BOOL=ON",
+                        # This is needed because VTK has multiple FindBoost
+                        # and they stick to system boost if there's a system boost
+                        # installed with CMake
+                        "-DBoost_NO_BOOST_CMAKE:BOOL=ON",
+                        # The xdmf project does not export any CMake file...
+                        "-DVTK_USE_SYSTEM_XDMF3:BOOL=OFF",
+                        "-DVTK_USE_SYSTEM_XDMF2:BOOL=OFF",
                     ]
                 )
-            if spec.satisfies("@9.2:"):
-                cmake_args.append("-DVTK_MODULE_USE_EXTERNAL_VTK_verdict:BOOL=OFF")
-            if spec.satisfies("@9.5:"):
-                cmake_args.append("-DVTK_MODULE_USE_EXTERNAL_VTK_vtkviskores:BOOL=OFF")
-
-        # Some variable names have changed
-        if spec.satisfies("@8.2.0"):
-            cmake_args.append("-DVTK_USE_SYSTEM_PUGIXML:BOOL=OFF")
-        elif spec.satisfies("@:8.1"):
-            cmake_args.extend(
-                [
-                    "-DVTK_USE_SYSTEM_LIBPROJ4:BOOL=OFF",
-                    f"-DNETCDF_CXX_ROOT={spec['netcdf-cxx'].prefix}",
-                ]
-            )
-
-        if "+mpi" in spec:
-            if spec.satisfies("@:8.2.0"):
-                cmake_args.extend(["-DVTK_Group_MPI:BOOL=ON", "-DVTK_USE_SYSTEM_DIY2:BOOL=OFF"])
             else:
-                cmake_args.extend(["-DVTK_USE_MPI=ON"])
-        else:
-            cmake_args.append("-DVTK_USE_MPI=OFF")
+                cmake_args.extend(
+                    [
+                        "-DVTK_MODULE_ENABLE_VTK_xdmf2:STRING=YES",
+                        "-DVTK_MODULE_ENABLE_VTK_xdmf3:STRING=YES",
+                        "-DVTK_MODULE_ENABLE_VTK_IOXdmf2:STRING=YES",
+                        "-DVTK_MODULE_ENABLE_VTK_IOXdmf3:STRING=YES",
+                    ]
+                )
+
+            if "io=conduit" in spec:
+                cmake_args.append(self.define("VTK_ENABLE_CATALYST", True))
+                cmake_args.append(self.define("VTK_MODULE_ENABLE_VTK_IOCatalystConduit", "YES"))
+
+            if "+mpi" in spec:
+                if spec.satisfies("@:8"):
+                    cmake_args.append("-DModule_vtkIOParallelXdmf3:BOOL=ON")
+                else:
+                    cmake_args.append("-DVTK_MODULE_ENABLE_VTK_IOParallelXdmf3:STRING=YES")
 
         if spec.satisfies("io=ffmpeg"):
             if spec.satisfies("@:8"):
@@ -442,18 +580,49 @@ class Vtk(CMakePackage):
             else:
                 cmake_args.append("-DVTK_MODULE_ENABLE_VTK_IOFFMPEG:STRING=YES")
 
+        if spec.satisfies("raytracing=ospray"):
+            cmake_args.append(self.define("VTK_MODULE_ENABLE_VTK_RenderingRayTracing", "YES"))
+            cmake_args.append("-DVTK_ENABLE_OSPRAY:BOOL=ON")
+            cmake_args.append("-DVTKOSPRAY_ENABLE_DENOISER:BOOL=ON")
+
+        if "+mpi" in spec:
+            cmake_args.append(self.define("VTK_GROUP_ENABLE_MPI", "YES"))
+            cmake_args.append(
+                self.define("VTK_MODULE_ENABLE_VTK_IOParallelNetCDF", netcdf_enabled)
+            )
+
+            if spec.satisfies("@:8.2.0"):
+                cmake_args.extend(["-DVTK_Group_MPI:BOOL=ON", "-DVTK_USE_SYSTEM_DIY2:BOOL=OFF"])
+            else:
+                cmake_args.extend(["-DVTK_USE_MPI=ON"])
+        else:
+            cmake_args.append("-DVTK_USE_MPI=OFF")
+
+        # Disable wrappers for other languages.
+        cmake_args.append("-DVTK_WRAP_JAVA=OFF")
+        if spec.satisfies("@:8.1"):
+            cmake_args.append("-DVTK_WRAP_TCL=OFF")
+
         # Enable/Disable wrappers for Python.
         if "+python" in spec:
-            cmake_args.append("-DVTK_WRAP_PYTHON=ON")
-            if "+mpi" in spec and spec.satisfies("@:8"):
-                cmake_args.append("-DVTK_USE_SYSTEM_MPI4PY:BOOL=ON")
-            if spec.satisfies("@9.0.0: ^python@3:"):
-                cmake_args.append("-DVTK_PYTHON_VERSION=3")
+            cmake_args.append(self.define("VTK_WRAP_PYTHON", True))
+            if spec.satisfies("@9.5:"):
+                cmake_args.extend(
+                    [
+                        self.define("VTK_MODULE_ENABLE_VTK_Python", "YES"),
+                        self.define("VTK_MODULE_ENABLE_VTK_PythonInterpreter", "YES"),
+                        self.define("VTK_MODULE_ENABLE_VTK_WrappingPythonCore", "YES"),
+                        self.define("VTK_MODULE_ENABLE_VTK_FiltersPython", "YES"),
+                        self.define("VTK_MODULE_ENABLE_VTK_RenderingMatplotlib", "YES"),
+                    ]
+                )
+            else:
+                if "+mpi" in spec and spec.satisfies("@:8"):
+                    cmake_args.append("-DVTK_USE_SYSTEM_MPI4PY:BOOL=ON")
+                if spec.satisfies("@9.0.0:9.4 ^python@3:"):
+                    cmake_args.append("-DVTK_PYTHON_VERSION=3")
         else:
             cmake_args.append("-DVTK_WRAP_PYTHON=OFF")
-
-        if "darwin" in spec.architecture:
-            cmake_args.extend(["-DCMAKE_MACOSX_RPATH=ON"])
 
         if "+qt" in spec:
             qt_ver = spec["qt"].version.up_to(1)
@@ -499,46 +668,6 @@ class Vtk(CMakePackage):
                         ]
                     )
 
-        if spec.satisfies("io=xdmf"):
-            if spec.satisfies("^cmake@3.12:"):
-                # This policy exists only for CMake >= 3.12
-                cmake_args.extend(["-DCMAKE_POLICY_DEFAULT_CMP0074=NEW"])
-
-            if spec.satisfies("@:8"):
-                cmake_args.extend(
-                    [
-                        # Enable XDMF Support here
-                        "-DModule_vtkIOXdmf2:BOOL=ON",
-                        "-DModule_vtkIOXdmf3:BOOL=ON",
-                        f"-DBOOST_ROOT={spec['boost'].prefix}",
-                        f"-DBOOST_LIBRARY_DIR={spec['boost'].prefix.lib}",
-                        f"-DBOOST_INCLUDE_DIR={spec['boost'].prefix.include}",
-                        "-DBOOST_NO_SYSTEM_PATHS:BOOL=ON",
-                        # This is needed because VTK has multiple FindBoost
-                        # and they stick to system boost if there's a system boost
-                        # installed with CMake
-                        "-DBoost_NO_BOOST_CMAKE:BOOL=ON",
-                        # The xdmf project does not export any CMake file...
-                        "-DVTK_USE_SYSTEM_XDMF3:BOOL=OFF",
-                        "-DVTK_USE_SYSTEM_XDMF2:BOOL=OFF",
-                    ]
-                )
-            else:
-                cmake_args.extend(
-                    [
-                        "-DVTK_MODULE_ENABLE_VTK_xdmf2:STRING=YES",
-                        "-DVTK_MODULE_ENABLE_VTK_xdmf3:STRING=YES",
-                        "-DVTK_MODULE_ENABLE_VTK_IOXdmf2:STRING=YES",
-                        "-DVTK_MODULE_ENABLE_VTK_IOXdmf3:STRING=YES",
-                    ]
-                )
-
-            if "+mpi" in spec:
-                if spec.satisfies("@:8"):
-                    cmake_args.append("-DModule_vtkIOParallelXdmf3:BOOL=ON")
-                else:
-                    cmake_args.append("-DVTK_MODULE_ENABLE_VTK_IOParallelXdmf3:STRING=YES")
-
         if spec.satisfies("@:9.4"):
             opengl_ver = "OpenGL2" if "+opengl2" in spec else "OpenGL"
             cmake_args.append(self.define("VTK_RENDERING_BACKEND", opengl_ver))
@@ -562,7 +691,12 @@ class Vtk(CMakePackage):
                 cmake_args.extend(["-DVTK_USE_X:BOOL=OFF", "-DVTK_USE_COCOA:BOOL=ON"])
 
             elif "platform=linux" in spec:
-                cmake_args.extend(["-DVTK_USE_X:BOOL=ON", "-DVTK_USE_COCOA:BOOL=OFF"])
+                cmake_args.extend(
+                    [
+                        self.define_from_variant("VTK_USE_X", "x11"),
+                        self.define("VTK_USE_COCOA", False),
+                    ]
+                )
 
         compile_flags = []
 
@@ -597,8 +731,6 @@ class Vtk(CMakePackage):
             if "%intel" in spec and spec.version >= Version("8.2"):
                 cmake_args.append("-DVTK_MODULE_ENABLE_VTK_IOMotionFX:BOOL=OFF")
 
-        cmake_args.append(self.define_from_variant("VTK_VERSIONED_INSTALL", "versioned_install"))
-
         # -no-ipo prevents an internal compiler error from multi-file
         # optimization (https://github.com/spack/spack/issues/20471)
         if "%intel" in spec:
@@ -609,13 +741,13 @@ class Vtk(CMakePackage):
             cmake_args.extend(
                 [f"-DCMAKE_C_FLAGS={compile_flags}", f"-DCMAKE_CXX_FLAGS={compile_flags}"]
             )
-        if spec.satisfies("@:8"):
-            vtk_example_arg = "BUILD_EXAMPLES"
-        else:
-            vtk_example_arg = "VTK_BUILD_EXAMPLES"
-        cmake_args.append(self.define_from_variant(f"{vtk_example_arg}", "examples"))
 
-        cmake_args.append(self.define_from_variant("VTK_DEBUG_LEAKS", "advanced_debug"))
+        cmake_args += [
+            self.define_from_variant(
+                "VTK_BUILD_EXAMPLES" if spec.satisfies("@9:") else "BUILD_EXAMPLES", "examples"
+            ),
+            self.define_from_variant("VTK_DEBUG_LEAKS", "advanced_debug"),
+        ]
 
         return cmake_args
 

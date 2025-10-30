@@ -167,7 +167,7 @@ class Viskores(CMakePackage, CudaPackage, ROCmPackage):
             # cuda support
             if "+cuda_native" in spec:
                 options.append("-DViskores_ENABLE_CUDA:BOOL=ON")
-                options.append("-DCMAKE_CUDA_HOST_COMPILER={0}".format(env["SPACK_CXX"]))
+                options.append(self.define("CMAKE_CUDA_HOST_COMPILER", self.compiler.cxx))
 
                 if spec.satisfies("^cmake@3.18:"):
                     options.append(CMakeBuilder.define_cuda_architectures(self))
